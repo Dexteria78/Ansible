@@ -1,0 +1,17 @@
+- name: Installer Apache uniquement sur Debian/Ubuntu
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Installer Apache2 sur les systèmes Debian
+      apt:
+        name: apache2
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Message de confirmation
+      debug:
+        msg: "Apache a été installé sur une machine de la famille Debian."
+      when: ansible_os_family == "Debian"

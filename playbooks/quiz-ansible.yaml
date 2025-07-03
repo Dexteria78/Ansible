@@ -1,0 +1,52 @@
+---
+- name: Déploiement de l'application Node.js quiz-ansible
+  hosts: all
+  become: yes
+
+  tasks:
+
+    - name: Mettre à jour les paquets
+      ansible.builtin.command: dnf update -y
+
+    - name: Installer git
+      ansible.builtin.command: dnf install -y git
+
+    - name: Télécharger le script d'installation Node.js depuis NodeSource
+      ansible.builtin.get_url:
+        url: https://rpm.nodesource.com/setup_23.x
+        dest: /tmp/nodesource.sh
+        mode: '0755'
+
+    - name: Exécuter le script d'installation Node.js
+      ansible.builtin.command: bash /tmp/nodesource.sh
+
+    - name: Installer nodejs
+      ansible.builtin.command: dnf install -y nodejs
+
+    - name: Supprimer ancien dossier si existant
+      ansible.builtin.file:
+        path: /opt/quiz-ansible
+        state: absent
+
+    - name: Cloner le dépôt Git dans /opt/quiz-ansible
+      ansible.builtin.git:
+        repo: https://github.com/franklin-tutorials/quiz-ansible.git
+        dest: /opt/quiz-ansible
+
+    - name: Installer les dépendances npm
+      ansible.builtin.command:
+        cmd: npm install
+        chdir: /opt/quiz-ansible
+
+    - name: Compiler l’application avec npm run build
+      ansible.builtin.command:
+        cmd: npm run build
+        chdir: /opt/quiz-ansible
+
+    - name: Installer serve en global
+      ansible.builtin.command: npm install -g serve
+
+    - name: Lancer l’application en tâche de fond
+      shell: nohup serve -s dist > /dev/null 2>&1 &
+      args:
+        chdir: /opt/quiz-ansible

@@ -1,0 +1,63 @@
+---
+- name: Test de connectivité et informations système
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Test de ping
+      ping:
+      
+    - name: Afficher les informations système
+      debug:
+        msg: |
+          Machine: {{ inventory_hostname }}
+          IP: {{ ansible_host }}
+          OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+          Architecture: {{ ansible_facts['architecture'] }}
+          Python: {{ ansible_facts['python_version'] }}
+          
+    - name: Vérifier l'espace disque
+      command: df -h /
+      register: disk_space
+      
+    - name: Afficher l'espace disque
+      debug:
+        msg: "Espace disque: {{ disk_space.stdout_lines[1] }}"
+        
+    - name: Vérifier la mémoire
+      command: free -h
+      register: memory_info
+      
+    - name: Afficher la mémoire
+      debug:
+        msg: "Mémoire: {{ memory_info.stdout_lines[1] }}"
+        
+    - name: Test de connectivité internet
+      uri:
+        url: https://www.google.com
+        method: HEAD
+        timeout: 10
+      register: internet_test
+      ignore_errors: yes
+      
+    - name: Résultat connectivité internet
+      debug:
+        msg: "Internet: {% if internet_test.status == 200 %}OK{% else %}KO{% endif %}"
+          
+- name: Résumé des tests
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Afficher le résumé
+      debug:
+        msg: |
+          Tests de connectivité terminés !
+          
+          Machines testées:
+          - client1 (Ubuntu) - 172.18.0.4
+          - client2 (Ubuntu) - 172.18.0.5
+          - client3 (Rocky) - 172.18.0.3
+          - client4 (Rocky) - 172.18.0.2
+          
+          Prêt pour le déploiement !

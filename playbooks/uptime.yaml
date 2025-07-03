@@ -1,0 +1,12 @@
+- name: Récupérer et afficher l'état de fonctionnement des machines
+  hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Exécuter la commande uptime
+      command: uptime
+      register: resultat_uptime
+
+    - name: Afficher le résultat
+      debug:
+        var: resultat_uptime.stdout

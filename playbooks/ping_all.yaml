@@ -1,0 +1,6 @@
+- name: Vérification des connexions SSH
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Ping SSH
+      ping:

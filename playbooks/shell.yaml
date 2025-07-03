@@ -1,0 +1,6 @@
+- name: Test avec le module shell
+  hosts: client1
+  gather_facts: false
+  tasks:
+    - name: Exécute la même commande via shell (réussira)
+      shell: cat /etc/passwd | grep root

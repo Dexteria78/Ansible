@@ -1,0 +1,6 @@
+- name: Transférer et exécuter le script sur les clients
+  hosts: all
+  become: yes
+  tasks:
+    - name: Exécuter le script local sur les hôtes distants
+      script: /root/script2.sh

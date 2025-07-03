@@ -1,0 +1,11 @@
+- name: Créer un utilisateur pierre
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ajouter l'utilisateur pierre
+      user:
+        name: pierre
+        shell: /bin/bash
+        home: /home/pierre
+        state: present
+        create_home: yes

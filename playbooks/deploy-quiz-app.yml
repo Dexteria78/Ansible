@@ -1,0 +1,216 @@
+---
+- name: Déployer l'application quiz-ansible
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    app_port: 3000
+    app_name: quiz-ansible
+    app_directory: /opt/quiz-ansible
+    
+  tasks:
+    - name: Exclure localhost du déploiement
+      meta: end_host
+      when: inventory_hostname == 'localhost'
+      
+    - name: Afficher les informations de déploiement
+      debug:
+        msg: |
+          Déploiement sur {{ inventory_hostname }}
+          IP: {{ ansible_host }}
+          OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+          
+    - name: Installer les outils de base
+      package:
+        name:
+          - git
+          - curl
+          - wget
+        state: present
+        
+    - name: Mettre à jour le cache des paquets (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == "Debian"
+      
+    - name: Installer Node.js 20 sur Ubuntu/Debian
+      block:
+        - name: Télécharger le script NodeSource
+          get_url:
+            url: https://deb.nodesource.com/setup_20.x
+            dest: /tmp/setup_nodejs.sh
+            mode: '0755'
+            
+        - name: Exécuter le script NodeSource
+          shell: bash /tmp/setup_nodejs.sh
+          
+        - name: Installer Node.js
+          apt:
+            name: nodejs
+            state: present
+            
+      when: ansible_facts['os_family'] == "Debian"
+      
+    - name: Installer Node.js 20 sur Rocky Linux
+      block:
+        - name: Télécharger le script NodeSource
+          get_url:
+            url: https://rpm.nodesource.com/setup_20.x
+            dest: /tmp/setup_nodejs.sh
+            mode: '0755'
+            
+        - name: Exécuter le script NodeSource
+          shell: bash /tmp/setup_nodejs.sh
+          
+        - name: Installer Node.js
+          dnf:
+            name: nodejs
+            state: present
+            
+      when: ansible_facts['os_family'] == "RedHat"
+      
+    - name: Vérifier l'installation de Node.js
+      command: node --version
+      register: node_version
+      
+    - name: Afficher la version de Node.js
+      debug:
+        msg: "Node.js version: {{ node_version.stdout }}"
+        
+    - name: Vérifier l'installation de npm
+      command: npm --version
+      register: npm_version
+      
+    - name: Afficher la version de npm
+      debug:
+        msg: "npm version: {{ npm_version.stdout }}"
+        
+    - name: Créer le répertoire de l'application
+      file:
+        path: "{{ app_directory }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+        
+    - name: Cloner le dépôt quiz-ansible
+      git:
+        repo: https://github.com/franklin-tutorials/quiz-ansible.git
+        dest: "{{ app_directory }}"
+        force: yes
+        version: HEAD
+        
+    - name: Installer les dépendances npm
+      npm:
+        path: "{{ app_directory }}"
+        state: present
+        production: no
+        
+    - name: Compiler l'application
+      command: npm run build
+      args:
+        chdir: "{{ app_directory }}"
+      environment:
+        NODE_ENV: production
+        
+    - name: Installer serve globalement
+      npm:
+        name: serve
+        global: yes
+        state: present
+        
+    - name: Créer le service systemd
+      copy:
+        content: |
+          [Unit]
+          Description=Quiz Ansible Application
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=root
+          Group=root
+          WorkingDirectory={{ app_directory }}
+          ExecStart=/usr/bin/serve -s dist -p {{ app_port }}
+          Restart=always
+          RestartSec=5
+          Environment=NODE_ENV=production
+          Environment=PORT={{ app_port }}
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/quiz-app.service
+        mode: '0644'
+        owner: root
+        group: root
+      notify: restart quiz-app
+      
+    - name: Recharger systemd
+      systemd:
+        daemon_reload: yes
+        
+    - name: Activer et démarrer le service
+      systemd:
+        name: quiz-app
+        enabled: yes
+        state: started
+        
+    - name: Attendre que l'application soit prête
+      wait_for:
+        port: "{{ app_port }}"
+        host: "{{ ansible_host }}"
+        delay: 5
+        timeout: 60
+        
+    - name: Vérifier que le service est actif
+      systemd:
+        name: quiz-app
+        state: started
+      register: service_status
+      
+    - name: Tester l'application localement
+      uri:
+        url: "http://localhost:{{ app_port }}"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: local_test
+      
+    - name: Afficher le résultat du déploiement
+      debug:
+        msg: |
+          SUCCESS - Application déployée sur {{ inventory_hostname }}
+          URL: http://{{ ansible_host }}:{{ app_port }}
+          Service: {{ service_status.status.ActiveState }}
+          Test local: {{ local_test.status }}
+          
+  handlers:
+    - name: restart quiz-app
+      systemd:
+        name: quiz-app
+        state: restarted
+        daemon_reload: yes
+        
+- name: Résumé final du déploiement
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Afficher le résumé complet
+      debug:
+        msg: |
+          DEPLOIEMENT TERMINE !
+          
+          Applications déployées:
+          - client1 (Ubuntu 24.04): http://172.18.0.4:3000
+          - client2 (Ubuntu 24.04): http://172.18.0.5:3000
+          - client3 (Rocky 9.6): http://172.18.0.3:3000
+          - client4 (Rocky 9.6): http://172.18.0.2:3000
+          
+          Pour tester depuis le conteneur ansible:
+          curl http://172.18.0.4:3000
+          curl http://172.18.0.5:3000
+          curl http://172.18.0.3:3000
+          curl http://172.18.0.2:3000

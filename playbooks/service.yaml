@@ -1,0 +1,16 @@
+- name: Gestion du service apache2
+  hosts: localhost
+  connection: local
+  vars:
+    service_state: started
+  tasks:
+    - name: Installer apache2 s'il n'est pas présent
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+
+    - name: Appliquer l'état du service apache2
+      service:
+        name: apache2
+        state: "{{ service_state }}"

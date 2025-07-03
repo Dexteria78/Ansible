@@ -1,0 +1,6 @@
+- name: Exécuter un script sur client1
+  hosts: client1
+  gather_facts: false
+  tasks:
+    - name: Lancer le script /root/script1.sh
+      shell: /root/script1.sh

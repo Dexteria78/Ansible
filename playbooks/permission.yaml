@@ -1,0 +1,8 @@
+- name: Modifier les permissions du fichier /root/vinci
+  hosts: ubuntu
+  gather_facts: false
+  tasks:
+    - name: Ajouter les permissions d'écriture pour tous les utilisateurs
+      file:
+        path: /root/vinci
+        mode: '0666'

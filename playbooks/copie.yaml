@@ -1,0 +1,8 @@
+- name: Copier le fichier sdv.conf vers les clients
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Copier /root/sdv.conf vers /tmp sur les clients
+      copy:
+        src: /root/sdv.conf
+        dest: /tmp/sdv.conf

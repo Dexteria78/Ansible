@@ -1,0 +1,11 @@
+---
+- name: Ajouter un mot de passe à l'utilisateur Pierre
+  hosts: all
+  become: yes
+  vars:
+    mot_de_passe_hache: "{{ newpass | password_hash('sha512') }}"
+  tasks:
+    - name: Définir le mot de passe de l'utilisateur Pierre
+      user:
+        name: pierre
+        password: "{{ mot_de_passe_hache }}"

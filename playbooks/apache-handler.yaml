@@ -1,0 +1,33 @@
+- name: Déploiement de index.html avec handler Apache (Rocky)
+  hosts: rocky
+  become: true
+
+  tasks:
+    - name: Installer Apache (httpd)
+      dnf:
+        name: httpd
+        state: present
+        update_cache: true
+
+    - name: Créer le dossier /var/www/html s’il n’existe pas
+      file:
+        path: /var/www/html
+        state: directory
+        owner: apache
+        group: apache
+        mode: '0755'
+
+    - name: Copier le fichier index.html
+      copy:
+        src: ./index.html
+        dest: /var/www/html/index.html
+        owner: apache
+        group: apache
+        mode: '0644'
+      notify: Redémarrer Apache
+
+  handlers:
+    - name: Redémarrer Apache
+      service:
+        name: httpd
+        state: restarted

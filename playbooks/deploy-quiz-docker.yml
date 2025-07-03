@@ -1,0 +1,257 @@
+---
+- name: Déployer l'application quiz-ansible (version conteneur)
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    app_port: 3000
+    app_name: quiz-ansible
+    app_directory: /opt/quiz-ansible
+    
+  tasks:
+    - name: Exclure localhost du déploiement
+      meta: end_host
+      when: inventory_hostname == 'localhost'
+      
+    - name: Afficher les informations de déploiement
+      debug:
+        msg: |
+          Déploiement sur {{ inventory_hostname }}
+          IP: {{ ansible_host }}
+          OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+          
+    - name: Installer les outils de base (Ubuntu/Debian)
+      apt:
+        name:
+          - git
+          - curl
+          - wget
+          - supervisor
+        state: present
+        update_cache: yes
+      when: ansible_facts['os_family'] == "Debian"
+      
+    - name: Installer les outils de base (Rocky Linux - sans curl)
+      dnf:
+        name:
+          - git
+          - wget
+          - supervisor
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
+      
+    - name: Installer Node.js 20 sur Ubuntu/Debian
+      block:
+        - name: Télécharger le script NodeSource
+          get_url:
+            url: https://deb.nodesource.com/setup_20.x
+            dest: /tmp/setup_nodejs.sh
+            mode: '0755'
+            
+        - name: Exécuter le script NodeSource
+          shell: bash /tmp/setup_nodejs.sh
+          
+        - name: Installer Node.js
+          apt:
+            name: nodejs
+            state: present
+            
+      when: ansible_facts['os_family'] == "Debian"
+      
+    - name: Installer Node.js 20 sur Rocky Linux
+      block:
+        - name: Télécharger le script NodeSource avec wget
+          shell: wget -O /tmp/setup_nodejs.sh https://rpm.nodesource.com/setup_20.x
+          
+        - name: Rendre le script exécutable
+          file:
+            path: /tmp/setup_nodejs.sh
+            mode: '0755'
+            
+        - name: Exécuter le script NodeSource
+          shell: bash /tmp/setup_nodejs.sh
+          
+        - name: Installer Node.js
+          dnf:
+            name: nodejs
+            state: present
+            
+      when: ansible_facts['os_family'] == "RedHat"
+      
+    - name: Vérifier l'installation de Node.js
+      command: node --version
+      register: node_version
+      
+    - name: Afficher la version de Node.js
+      debug:
+        msg: "Node.js version: {{ node_version.stdout }}"
+        
+    - name: Vérifier l'installation de npm
+      command: npm --version
+      register: npm_version
+      
+    - name: Afficher la version de npm
+      debug:
+        msg: "npm version: {{ npm_version.stdout }}"
+        
+    - name: Créer le répertoire de l'application
+      file:
+        path: "{{ app_directory }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+        
+    - name: Cloner le dépôt quiz-ansible
+      git:
+        repo: https://github.com/franklin-tutorials/quiz-ansible.git
+        dest: "{{ app_directory }}"
+        force: yes
+        version: HEAD
+        
+    - name: Installer les dépendances npm
+      npm:
+        path: "{{ app_directory }}"
+        state: present
+        production: no
+        
+    - name: Compiler l'application
+      command: npm run build
+      args:
+        chdir: "{{ app_directory }}"
+      environment:
+        NODE_ENV: production
+        
+    - name: Installer serve globalement
+      npm:
+        name: serve
+        global: yes
+        state: present
+        
+    - name: Arrêter les processus serve existants
+      shell: pkill -f "serve.*quiz" || true
+      ignore_errors: yes
+      
+    - name: Créer le script de démarrage
+      copy:
+        content: |
+          #!/bin/bash
+          cd {{ app_directory }}
+          nohup serve -s dist -p {{ app_port }} > /var/log/quiz-app.log 2>&1 &
+          echo $! > /var/run/quiz-app.pid
+          echo "Quiz app started on port {{ app_port }}"
+        dest: /usr/local/bin/start-quiz-app.sh
+        mode: '0755'
+        owner: root
+        group: root
+        
+    - name: Créer le script d'arrêt
+      copy:
+        content: |
+          #!/bin/bash
+          if [ -f /var/run/quiz-app.pid ]; then
+            kill $(cat /var/run/quiz-app.pid) || true
+            rm -f /var/run/quiz-app.pid
+          fi
+          pkill -f "serve.*quiz" || true
+          echo "Quiz app stopped"
+        dest: /usr/local/bin/stop-quiz-app.sh
+        mode: '0755'
+        owner: root
+        group: root
+        
+    - name: Créer le script de redémarrage
+      copy:
+        content: |
+          #!/bin/bash
+          /usr/local/bin/stop-quiz-app.sh
+          sleep 2
+          /usr/local/bin/start-quiz-app.sh
+        dest: /usr/local/bin/restart-quiz-app.sh
+        mode: '0755'
+        owner: root
+        group: root
+        
+    - name: Démarrer l'application
+      shell: /usr/local/bin/start-quiz-app.sh
+      
+    - name: Attendre que l'application soit prête
+      wait_for:
+        port: "{{ app_port }}"
+        host: "{{ ansible_host }}"
+        delay: 3
+        timeout: 30
+        
+    - name: Vérifier que l'application répond
+      uri:
+        url: "http://localhost:{{ app_port }}"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: app_test
+      
+    - name: Vérifier les processus
+      shell: ps aux | grep -v grep | grep serve
+      register: process_check
+      ignore_errors: yes
+      
+    - name: Afficher le résultat du déploiement
+      debug:
+        msg: |
+          SUCCESS - Application déployée sur {{ inventory_hostname }}
+          URL: http://{{ ansible_host }}:{{ app_port }}
+          HTTP Status: {{ app_test.status }}
+          Process: {{ process_check.stdout | default('Not found') }}
+          
+- name: Tests finaux
+  hosts: all
+  gather_facts: no
+  
+  tasks:
+    - name: Exclure localhost des tests
+      meta: end_host
+      when: inventory_hostname == 'localhost'
+      
+    - name: Tester l'application depuis le conteneur ansible
+      uri:
+        url: "http://{{ ansible_host }}:3000"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: final_test
+      delegate_to: localhost
+      
+    - name: Afficher les résultats des tests
+      debug:
+        msg: |
+          Test final pour {{ inventory_hostname }}:
+          URL: http://{{ ansible_host }}:3000
+          Status: {{ final_test.status }}
+          
+- name: Résumé final du déploiement
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Afficher le résumé complet
+      debug:
+        msg: |
+          DEPLOIEMENT TERMINE !
+          
+          Applications déployées:
+          - client1 (Ubuntu 24.04): http://172.18.0.4:3000
+          - client2 (Ubuntu 24.04): http://172.18.0.5:3000
+          - client3 (Rocky 9.6): http://172.18.0.3:3000
+          - client4 (Rocky 9.6): http://172.18.0.2:3000
+          
+          Pour tester:
+          curl http://172.18.0.4:3000
+          curl http://172.18.0.5:3000
+          curl http://172.18.0.3:3000
+          curl http://172.18.0.2:3000
+          
+          Scripts de gestion créés:
+          - /usr/local/bin/start-quiz-app.sh
+          - /usr/local/bin/stop-quiz-app.sh
+          - /usr/local/bin/restart-quiz-app.sh
