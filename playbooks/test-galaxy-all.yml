@@ -1,0 +1,49 @@
+---
+- name: Test WordPress sur Ubuntu avec le rôle Galaxy
+  hosts: ubuntu
+  become: yes
+  vars:
+    vault_db_password: "UbuntuGalaxy123!"
+    vault_db_root_password: "UbuntuGalaxyRoot123!"
+    wp_debug: true
+    db_name: "wp_ubuntu_galaxy"
+  roles:
+    - Dexteria78.wordpress
+
+- name: Test WordPress sur Rocky Linux avec le rôle Galaxy
+  hosts: rocky
+  become: yes
+  vars:
+    vault_db_password: "RockyGalaxy123!"
+    vault_db_root_password: "RockyGalaxyRoot123!"
+    wp_debug: true
+    db_name: "wp_rocky_galaxy"
+  roles:
+    - Dexteria78.wordpress
+    
+- name: Vérification finale
+  hosts: all
+  become: yes
+  tasks:
+    - name: Vérifier les services
+      systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        - mariadb
+      check_mode: yes
+      
+    - name: Test d'accès WordPress
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}"
+        method: GET
+        status_code: [200, 302]
+      register: wp_access
+      
+    - name: Résultats finaux
+      debug:
+        msg:
+          - "Serveur: {{ inventory_hostname }} ({{ ansible_os_family }})"
+          - "WordPress accessible: {{ wp_access.status == 200 or wp_access.status == 302 }}"
+          - "URL: http://{{ ansible_default_ipv4.address }}"

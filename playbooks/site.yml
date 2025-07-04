@@ -1,0 +1,18 @@
+---
+- name: Deploy WordPress on all servers
+  hosts: all
+  become: yes
+  vars:
+    vault_db_password: "SecurePass123!"
+    vault_db_root_password: "RootSecure123!"
+  roles:
+    - ansible-role-wordpress
+  
+  post_tasks:
+    - name: Display WordPress access information
+      debug:
+        msg:
+          - "WordPress has been installed successfully!"
+          - "Access URL: http://{{ ansible_default_ipv4.address }}"
+          - "Database: {{ db_name }}"
+          - "Database User: {{ db_user }}"

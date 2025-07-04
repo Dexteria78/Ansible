@@ -1,0 +1,19 @@
+---
+- name: Test WordPress on Ubuntu servers
+  hosts: ubuntu
+  become: yes
+  vars:
+    vault_db_password: "UbuntuPass123!"
+    vault_db_root_password: "UbuntuRoot123!"
+    wp_debug: true
+  roles:
+    - ansible-role-wordpress
+  
+  post_tasks:
+    - name: Display Ubuntu specific information
+      debug:
+        msg:
+          - "WordPress installed on Ubuntu server"
+          - "Server: {{ inventory_hostname }}"
+          - "IP: {{ ansible_default_ipv4.address }}"
+          - "Debug mode: {{ wp_debug }}"
